@@ -1,5 +1,6 @@
 import abc
 from typing import Coroutine, Any
+import asyncio
 
 """
 Описание задачи:
@@ -65,16 +66,39 @@ class StudentWatcher(AbstractWatcher):
     def __init__(self, registrator: AbstractRegistrator):
         super().__init__(registrator)
         # Your code goes here
-        ...
+        
+        self.started_tasks = set()
+        self.is_started = False
 
     async def start(self) -> None:
         # Your code goes here
-        ...
+
+        if self.is_started:
+            raise RuntimeError('Watcher already started')
+        self.is_started = True
 
     async def stop(self) -> None:
         # Your code goes here
-        ...
+        
+        done_tasks, pending_tasks = await asyncio.wait(self.started_tasks, return_when=asyncio.ALL_COMPLETED)
+        for task in done_tasks:
+            if task in self.started_tasks:
+                self.started_tasks.remove(task)
+                await self.register(task)
+            else:
+                task.cancel()
+
+        self.started_tasks.clear()
 
     def start_and_watch(self, coro: Coroutine) -> None:
         # Your code goes here
-        ...
+
+        task_to_start = asyncio.create_task(coro)
+        self.started_tasks.add(task_to_start)
+
+    async def register(self, task: asyncio.Task) -> None:
+
+        if task.exception():
+            self.registrator.register_error(task.exception())
+        else:
+            self.registrator.register_value(task.result())
